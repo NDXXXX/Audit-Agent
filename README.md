@@ -425,3 +425,7 @@ uv run --no-sync python -m ddclaw --help
 ## License
 
 本项目采用 [MIT License](LICENSE) 开源，版权所有 © 2026 NDXXXX。
+
+## 🙏 致谢
+
+[**Textual**](https://github.com/Textualize/textual) — **TUI 架构**
