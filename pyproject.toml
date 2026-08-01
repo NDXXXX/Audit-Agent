@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DDclaw"
+version = "0.1.0"
+description = "A workspace-scoped coding agent CLI powered by LangChain and DeepSeek."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langchain-core>=0.3",
+    "langchain-deepseek>=1.1",
+    "langgraph>=1.0",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+    "tavily-python>=0.7.26",
+    "textual>=1.0",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+ddclaw = "ddclaw.cli.app:app"
+ddclaw-tui = "ddclaw.cli.tui.app:run_tui"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ddclaw*"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]
+testpaths = ["tests"]
