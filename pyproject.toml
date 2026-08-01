@@ -7,6 +7,7 @@ name = "DDclaw"
 version = "0.1.0"
 description = "A workspace-scoped coding agent CLI powered by LangChain and DeepSeek."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "langchain-core>=0.3",
@@ -28,6 +29,11 @@ dev = [
 [project.scripts]
 ddclaw = "ddclaw.cli.app:app"
 ddclaw-tui = "ddclaw.cli.tui.app:run_tui"
+
+[project.urls]
+Homepage = "https://github.com/NDXXXX/DDclaw"
+Repository = "https://github.com/NDXXXX/DDclaw"
+Issues = "https://github.com/NDXXXX/DDclaw/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
