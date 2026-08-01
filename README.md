@@ -1,12 +1,8 @@
-# DDclaw
+<p align="center">
+  <img src="docs/assets/ddclaw-logo.png" alt="DDclaw Logo" width="420">
+</p>
 
-```text
-        /\_/\
-       ( •ᴗ• )ฅ
-       /  DD \
-  ━━━ DDclaw ━━━
-  MultiAgent Coding Companion
-```
+# DDClaw
 
 DDclaw 是一个运行在本地终端中的多 Agent 编程助手。它以 DeepSeek 为
 大语言模型，通过 LangGraph 组织规划、实现、验证、上下文压缩和失败重试，
