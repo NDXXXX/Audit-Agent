@@ -2,6 +2,10 @@
   <img src="docs/assets/ddclaw-logo.png" alt="DDclaw Logo" width="420">
 </p>
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
+
 # DDClaw
 
 DDclaw 是一个运行在本地终端中的多 Agent 编程助手。它以 DeepSeek 为
@@ -420,5 +424,4 @@ uv run --no-sync python -m ddclaw --help
 
 ## License
 
-当前仓库尚未添加开源许可证。公开可见不等于允许复制、修改或再分发；发布前
-请根据你的授权意图选择许可证。
+本项目采用 [MIT License](LICENSE) 开源，版权所有 © 2026 NDXXXX。
