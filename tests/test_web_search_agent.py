@@ -5,9 +5,9 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from ddclaw.agents import search_agent as search_agent_module
-from ddclaw.tools import web_search_tool as web_search_module
-from ddclaw.tools.web_search_tool import WebSearchInput, WebSearchTool
+from audit_agent.agents import search_agent as search_agent_module
+from audit_agent.tools import web_search_tool as web_search_module
+from audit_agent.tools.web_search_tool import WebSearchInput, WebSearchTool
 
 
 class FakeTavilyClient:

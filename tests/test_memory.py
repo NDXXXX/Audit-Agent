@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ddclaw.core.state import RuntimeState
-from ddclaw.graph.memory import (
+from audit_agent.core.state import RuntimeState
+from audit_agent.graph.memory import (
     RULES_LAYER,
     _short_text,
     _trim_handoffs,
@@ -77,7 +77,6 @@ def test_build_layered_memory_reads_files_and_bounds_context(
                 }
             ],
             "agent_handoffs": handoffs,
-            "code_agent_summary": "c" * 1100,
             "verifier_summary": "v" * 1100,
             "last_error": "e" * 1500,
             "attempts": 2,
@@ -98,7 +97,6 @@ def test_build_layered_memory_reads_files_and_bounds_context(
     assert working["session_context"] == "prior conversation"
     assert len(working["research_notes"]) == 1603
     assert working["research_notes"].endswith("...")
-    assert len(working["code_agent_summary"]) == 1003
     assert len(working["verifier_summary"]) == 1003
     assert len(working["last_error"]) == 1403
     assert working["sources"] == [

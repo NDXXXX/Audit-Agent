@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from ddclaw.core.paths import WorkspacePathError
-from ddclaw.core.state import RuntimeState
-from ddclaw.tools.file_tools import FileEditTool, FileReadTool, FileWriteTool
+from audit_agent.core.paths import WorkspacePathError
+from audit_agent.core.state import RuntimeState
+from audit_agent.tools.file_tools import FileEditTool, FileReadTool, FileWriteTool
 
 
 def test_runtime_state_creates_and_canonicalizes_workspace(tmp_path: Path) -> None:

@@ -12,10 +12,10 @@ from langchain_core.messages import (
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
-from ddclaw.core.approval import ApprovalDecision, ApprovalRequest
-from ddclaw.core.state import RuntimeState
-from ddclaw.graph import nodes
-from ddclaw.graph.state import DDclawGraphState
+from audit_agent.core.approval import ApprovalDecision, ApprovalRequest
+from audit_agent.core.state import RuntimeState
+from audit_agent.graph import nodes
+from audit_agent.graph.state import AuditGraphState
 
 
 class FakeBoundModel:
@@ -179,7 +179,7 @@ def test_chat_responder_answers_without_binding_tools(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    model = FakeBoundModel([AIMessage(content="你好！我是 DDclaw。")])
+    model = FakeBoundModel([AIMessage(content="你好！我是 Audit Agent。")])
     events: list[dict[str, Any]] = []
     monkeypatch.setattr(nodes, "create_model", lambda: model)
     monkeypatch.setattr(nodes, "_get_event_writer", lambda: events.append)
@@ -192,8 +192,8 @@ def test_chat_responder_answers_without_binding_tools(
     )
 
     assert update == {
-        "chat_response": "你好！我是 DDclaw。",
-        "final_answer": "你好！我是 DDclaw。",
+        "chat_response": "你好！我是 Audit Agent。",
+        "final_answer": "你好！我是 Audit Agent。",
     }
     assert model.invocations[0][0].content == nodes.CHAT_RESPONDER_PROMPT
     assert events[0]["node"] == "chat_responder"
@@ -212,7 +212,7 @@ def test_intent_route_fn(
     intent_route: str | None,
     expected: str,
 ) -> None:
-    state: DDclawGraphState = {}
+    state: AuditGraphState = {}
     if intent_route is not None:
         state["intent_route"] = intent_route
     assert nodes.intent_route_fn(state) == expected
@@ -265,7 +265,7 @@ def test_planner_node_creates_structured_plan(
     assert [tool.name for tool in model.bound_tools] == [
         "todo_write",
         "call_search_agent",
-        "call_code_agent",
+        "call_auditors",
     ]
     assert [event["type"] for event in events] == [
         "memory",
@@ -334,7 +334,6 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
     tmp_path: Path,
 ) -> None:
     planned_todo = _todo()
-    delegated_todo = _todo(status="completed", note="Implemented")
     first = AIMessage(
         content="",
         tool_calls=[
@@ -356,9 +355,9 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
                 "type": "tool_call",
             },
             {
-                "name": "call_code_agent",
+                "name": "call_auditors",
                 "args": {"instruction": "Implement the published plan."},
-                "id": "code-handoff",
+                "id": "audit-handoff",
                 "type": "tool_call",
             },
         ],
@@ -398,25 +397,36 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
             ],
         }
 
-    def fake_code_agent(
+    def fake_auditor(
         state: dict[str, Any],
         instruction: str,
         *,
+        dimension: str,
         writer: Any,
     ) -> dict[str, Any]:
         code_state_snapshots.append(dict(state))
-        assert instruction == "Implement the published plan."
         return {
             "ok": True,
-            "summary": "Implementation completed and tests passed.",
-            "todos": [delegated_todo],
-            "messages": [HumanMessage(content="codeAgent session")],
+            "dimension": dimension,
+            "summary": f"Audit {dimension} completed.",
+            "findings": [
+                {
+                    "dimension": dimension,
+                    "severity": "medium",
+                    "file": "test.py",
+                    "line": 1,
+                    "title": f"Finding from {dimension}",
+                    "description": "Test",
+                    "suggestion": "Fix it",
+                }
+            ],
+            "messages": [],
             "tool_events": [],
         }
 
     monkeypatch.setattr(nodes, "create_model", lambda: model)
     monkeypatch.setattr(nodes, "run_search_agent", fake_search_agent)
-    monkeypatch.setattr(nodes, "run_code_agent", fake_code_agent)
+    monkeypatch.setattr(nodes, "run_auditor", fake_auditor)
     monkeypatch.setattr(nodes, "_get_event_writer", lambda: events.append)
 
     state = {
@@ -427,7 +437,7 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
 
     update = nodes.planner_node(state)
 
-    assert update["todos"] == [delegated_todo]
+    assert update["todos"] == [planned_todo]
     assert update["research_notes"] == "Official specification located."
     assert update["sources"] == [
         {
@@ -437,24 +447,22 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
             "score": 0.99,
         }
     ]
-    assert update["code_agent_summary"] == (
-        "Implementation completed and tests passed."
+    # Auditors return review_findings, not code_agent_summary
+    findings = update["review_findings"]
+    assert len(findings) == 4  # one per audit dimension
+    assert all(
+        f["dimension"] in {"security", "perf", "correctness", "style"}
+        for f in findings
     )
-    assert update["agent_handoffs"] == [
-        {
-            "from_agent": "planner",
-            "to_agent": "searchAgent",
-            "instruction": "Find the official specification.",
-            "result": "Official specification located.",
-        },
-        {
-            "from_agent": "planner",
-            "to_agent": "codeAgent",
-            "instruction": "Implement the published plan.",
-            "result": "Implementation completed and tests passed.",
-        },
-    ]
-    assert len(update["messages"]) == 1
+    assert update["agent_handoffs"][0] == {
+        "from_agent": "planner",
+        "to_agent": "searchAgent",
+        "instruction": "Find the official specification.",
+        "result": "Official specification located.",
+    }
+    # Second handoff is the combined auditors handoff
+    assert update["agent_handoffs"][1]["to_agent"] == "auditors"
+    assert "messages" not in update  # auditors don't return messages in test
     assert code_state_snapshots[0]["research_notes"] == (
         "Official specification located."
     )
@@ -474,99 +482,28 @@ def test_planner_node_delegates_search_then_code_and_persists_handoffs(
         {
             "type": "handoff",
             "from": "planner",
-            "to": "codeAgent",
+            "to": "auditor:security",
+            "instruction": "Implement the published plan.",
+        },
+        {
+            "type": "handoff",
+            "from": "planner",
+            "to": "auditor:perf",
+            "instruction": "Implement the published plan.",
+        },
+        {
+            "type": "handoff",
+            "from": "planner",
+            "to": "auditor:correctness",
+            "instruction": "Implement the published plan.",
+        },
+        {
+            "type": "handoff",
+            "from": "planner",
+            "to": "auditor:style",
             "instruction": "Implement the published plan.",
         },
     ]
-
-
-def test_actor_node_runs_react_loop_and_updates_todo(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    first = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "todo_update",
-                "args": {
-                    "id": "todo-1",
-                    "status": "completed",
-                    "note": "Implemented",
-                },
-                "id": "todo-call",
-                "type": "tool_call",
-            }
-        ],
-    )
-    final = AIMessage(content="Implemented and tested the requested file.")
-    bound = FakeBoundModel([first, final])
-    model = FakeModel(bound)
-    events: list[dict[str, Any]] = []
-    monkeypatch.setattr(nodes, "create_model", lambda: model)
-    monkeypatch.setattr(nodes, "build_tools", lambda runtime: [])
-    monkeypatch.setattr(nodes, "_get_event_writer", lambda: events.append)
-
-    update = nodes.actor_node(
-        {
-            "task": "Create result.txt",
-            "runtime": RuntimeState(tmp_path),
-            "plan_summary": "Create the file.",
-            "todos": [_todo()],
-        }
-    )
-
-    assert update["last_actor_summary"] == (
-        "Implemented and tested the requested file."
-    )
-    assert update["todos"] == [_todo(status="completed", note="Implemented")]
-    assert [event["type"] for event in events] == [
-        "ai_message",
-        "tool_call",
-        "tool_result",
-        "ai_message",
-        "final_answer",
-    ]
-    assert any(isinstance(message, HumanMessage) for message in update["messages"])
-    assert any(isinstance(message, ToolMessage) for message in update["messages"])
-    assert model.bound_tools is not None
-    assert [tool.name for tool in model.bound_tools] == ["todo_update"]
-
-
-def test_actor_node_streams_custom_events_inside_graph(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    model = FakeModel(
-        FakeBoundModel(
-            [AIMessage(content="Finished without calling a tool.")]
-        )
-    )
-    monkeypatch.setattr(nodes, "create_model", lambda: model)
-    monkeypatch.setattr(nodes, "build_tools", lambda runtime: [])
-
-    builder = StateGraph(DDclawGraphState)
-    builder.add_node("actor", nodes.actor_node)
-    builder.add_edge(START, "actor")
-    builder.add_edge("actor", END)
-    graph = builder.compile()
-
-    events = list(
-        graph.stream(
-            {
-                "task": "Report completion",
-                "runtime": RuntimeState(tmp_path),
-                "todos": [],
-            },
-            stream_mode="custom",
-        )
-    )
-
-    assert [event["type"] for event in events] == [
-        "ai_message",
-        "final_answer",
-    ]
-    assert events[-1]["content"] == "Finished without calling a tool."
 
 
 def test_verifier_node_passes_and_completes_todos(
@@ -614,7 +551,6 @@ def test_verifier_node_passes_and_completes_todos(
             "acceptance_criteria": ["The file exists."],
             "verification_commands": ["test -f result.txt"],
             "attempts": 1,
-            "code_agent_summary": "Created result.txt",
         }
     )
 
@@ -782,7 +718,7 @@ def test_context_monitor_node_falls_back_to_character_estimate(
         "create_model",
         lambda: (_ for _ in ()).throw(RuntimeError("tokenizer unavailable")),
     )
-    state: DDclawGraphState = {
+    state: AuditGraphState = {
         "task": "Fallback counting",
         "runtime": RuntimeState(tmp_path),
         "messages": [HumanMessage(content="abcd")],
@@ -855,7 +791,6 @@ def test_context_compressor_node_replaces_messages_and_persists_summary(
                 }
                 for index in range(8)
             ],
-            "code_agent_summary": "z" * 1_100,
             "verification_results": [
                 {
                     "command": "python -m pytest",
@@ -910,7 +845,6 @@ def test_context_compressor_node_replaces_messages_and_persists_summary(
     assert len(update["agent_handoffs"]) == 6
     assert update["agent_handoffs"][0]["instruction"] == "2"
     assert len(update["agent_handoffs"][0]["result"]) == 1_003
-    assert len(update["code_agent_summary"]) == 1_003
     assert len(update["verification_results"][0]["stdout"]) == 2_003
     assert len(update["verification_results"][0]["stderr"]) == 2_003
     assert len(update["verification_checks"][0]["detail"]) == 1_003
@@ -955,7 +889,7 @@ def test_context_compressor_replaces_history_through_graph_reducer(
     )
     monkeypatch.setattr(nodes, "create_model", lambda: model)
 
-    builder = StateGraph(DDclawGraphState)
+    builder = StateGraph(AuditGraphState)
     builder.add_node("context_compressor", nodes.context_compressor_node)
     builder.add_edge(START, "context_compressor")
     builder.add_edge("context_compressor", END)
@@ -1007,7 +941,7 @@ def test_context_compressor_replaces_history_through_graph_reducer(
     ],
 )
 def test_context_monitor_route(
-    state: DDclawGraphState,
+    state: AuditGraphState,
     expected: str,
 ) -> None:
     assert nodes.context_monitor_route(state) == expected
@@ -1022,7 +956,7 @@ def test_context_monitor_route(
     ],
 )
 def test_context_compressor_route(
-    state: DDclawGraphState,
+    state: AuditGraphState,
     expected: str,
 ) -> None:
     assert nodes.context_compressor_route(state) == expected

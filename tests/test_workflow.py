@@ -2,24 +2,20 @@ from typing import Any
 
 import pytest
 
-from ddclaw.graph import workflow
-from ddclaw.prompts.stage2 import (
-    ACTOR_PROMPT,
-    FINAL_PROMPT,
-)
-from ddclaw.prompts.stage3 import PLANNER_PROMPT, VERIFIER_PROMPT
-from ddclaw.prompts.stage4 import CONTEXT_COMPRESSION_PROMPT
-from ddclaw.prompts.stage5 import CHAT_RESPONDER_PROMPT, INTENT_ROUTER_PROMPT
+from audit_agent.graph import workflow
+from audit_agent.prompts.stage2 import FINAL_PROMPT
+from audit_agent.prompts.stage3 import PLANNER_PROMPT, VERIFIER_PROMPT
+from audit_agent.prompts.stage4 import CONTEXT_COMPRESSION_PROMPT
+from audit_agent.prompts.stage5 import CHAT_RESPONDER_PROMPT, INTENT_ROUTER_PROMPT
 
 
 def test_stage3_planner_and_shared_prompts_define_each_role() -> None:
     assert "planner/supervisor" in PLANNER_PROMPT
     assert "TodoWriteTool" in PLANNER_PROMPT
     assert "CallSearchAgentTool" in PLANNER_PROMPT
-    assert "CallCodeAgentTool" in PLANNER_PROMPT
-    assert "TodoUpdateTool" in ACTOR_PROMPT
-    assert "read-only tools" in VERIFIER_PROMPT
-    assert "NotepadReadTool" in VERIFIER_PROMPT
+    assert "CallAuditorsTool" in PLANNER_PROMPT
+    assert "adversarial" in VERIFIER_PROMPT.lower()
+    assert "deduplicate" in VERIFIER_PROMPT.lower()
     assert "passed: boolean" in VERIFIER_PROMPT
     assert "{status}" in FINAL_PROMPT
     assert "context_compressor" in CONTEXT_COMPRESSION_PROMPT
@@ -47,15 +43,13 @@ def test_final_node_formats_terminal_state(
             "passed": passed,
             "attempts": 2,
             "max_attempts": 3,
-            "code_agent_summary": "Created and checked result.txt.",
             "verification_reason": "Verification result.",
             "recommended_next_instruction": "Fix the failed check.",
         }
     )
 
     assert expected_status in update["final_answer"]
-    assert "Attempts: 2/3" in update["final_answer"]
-    assert "Created and checked result.txt." in update["final_answer"]
+    assert "Review cycles: 2/3" in update["final_answer"]
 
 
 def test_build_workflow_contains_expected_nodes() -> None:
@@ -149,7 +143,6 @@ def test_workflow_reaches_final_after_success(
             ],
             "acceptance_criteria": ["File exists"],
             "verification_commands": ["test -f result.txt"],
-            "code_agent_summary": "Created result.txt.",
         },
     )
     monkeypatch.setattr(
@@ -201,7 +194,6 @@ def test_workflow_replans_until_max_attempts(
             ],
             "acceptance_criteria": ["Tests pass"],
             "verification_commands": ["false"],
-            "code_agent_summary": f"Code attempt {calls['planner']}",
             "context_next_node": "verifier",
         }
 

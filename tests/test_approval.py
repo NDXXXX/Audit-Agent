@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from ddclaw.core.approval import (
+from audit_agent.core.approval import (
     ApprovalDecision,
     ApprovalRequest,
     RunInterrupted,
@@ -11,9 +11,9 @@ from ddclaw.core.approval import (
     destructive_command_escapes_workspace,
     normalize_approval_mode,
 )
-from ddclaw.core.state import RuntimeState
-from ddclaw.tools import bash_tool as bash_tool_module
-from ddclaw.tools.bash_tool import BashTool
+from audit_agent.core.state import RuntimeState
+from audit_agent.tools import bash_tool as bash_tool_module
+from audit_agent.tools.bash_tool import BashTool
 
 
 @pytest.mark.parametrize(

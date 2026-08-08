@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from ddclaw.providers import deepseek_provider
+from audit_agent.providers import deepseek_provider
 
 
 class FakeChatDeepSeek:

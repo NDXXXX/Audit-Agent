@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from ddclaw.core.checkpoint import (
+from audit_agent.core.checkpoint import (
     CheckpointManager,
     build_recovery_markdown,
     normalize_checkpoint_mode,
     resume_command,
     workspace_manifest,
 )
-from ddclaw.core.state import RuntimeState
+from audit_agent.core.state import RuntimeState
 
 
 @pytest.mark.parametrize(
@@ -62,7 +62,7 @@ def test_light_checkpoint_saves_snapshot_and_restores_workspace(
     )
 
     assert manager.enabled is True
-    assert manager.root == workspace / ".ddclaw" / "checkpoints"
+    assert manager.root == workspace / ".audit" / "checkpoints"
     assert event is not None
     assert event["type"] == "checkpoint_saved"
     assert event["latest_node"] == "planner"
@@ -83,7 +83,7 @@ def test_light_checkpoint_saves_snapshot_and_restores_workspace(
     assert not (manager.root / "state.json").exists()
     assert not (manager.root / "events.jsonl").exists()
     recovery = recovery_path.read_text(encoding="utf-8")
-    assert "# DDclaw Recovery" in recovery
+    assert "# Audit Agent Recovery" in recovery
     assert "Create app" in recovery
     assert "app.py" in recovery
     assert payload["git_commit"] in recovery
@@ -181,10 +181,10 @@ def test_off_checkpoint_mode_does_not_create_files(tmp_path: Path) -> None:
 
 def test_manifest_excludes_internal_metadata(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    (workspace / ".ddclaw" / "checkpoints").mkdir(parents=True)
+    (workspace / ".audit" / "checkpoints").mkdir(parents=True)
     (workspace / ".git").mkdir()
     (workspace / "src").mkdir()
-    (workspace / ".ddclaw" / "checkpoint.json").write_text("internal")
+    (workspace / ".audit" / "checkpoint.json").write_text("internal")
     (workspace / ".git" / "HEAD").write_text("internal")
     (workspace / "src" / "main.py").write_text("print('ok')")
 
@@ -209,7 +209,7 @@ def test_recovery_helpers_include_status_files_commit_and_command(
         }
     )
 
-    assert command.startswith("ddclaw --resume ")
+    assert command.startswith("audit --resume ")
     assert "workspace with spaces" in command
     assert "Recover task" in markdown
     assert "running" in markdown

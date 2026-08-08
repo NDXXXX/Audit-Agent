@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ddclaw.core.session import (
+from audit_agent.core.session import (
     MAX_SESSION_CONTEXT,
     MAX_TURN_CONTENT,
     SESSION_FILE,
@@ -34,7 +34,7 @@ def test_load_or_create_session_persists_complete_initial_state(
         (session_root / SESSION_FILE).read_text(encoding="utf-8")
     ) == session
     summary = (session_root / SESSION_SUMMARY_FILE).read_text(encoding="utf-8")
-    assert "# DDclaw Session Summary" in summary
+    assert "# Audit Agent Session Summary" in summary
     assert session["session_id"] in summary
 
     assert load_or_create_session(workspace) == session
@@ -137,7 +137,7 @@ def test_session_context_has_recent_files_and_ten_logical_turns(
             str(index),
             encoding="utf-8",
         )
-    internal = workspace / ".ddclaw" / "ignored.txt"
+    internal = workspace / ".audit" / "ignored.txt"
     internal.parent.mkdir()
     internal.write_text("secret", encoding="utf-8")
     session = load_or_create_session(workspace)
@@ -159,7 +159,7 @@ def test_session_context_has_recent_files_and_ten_logical_turns(
     assert "Turn 3 [user]: user-2" in context
     assert "assistant-11" in context
     assert context.count(" bytes)") == 30
-    assert ".ddclaw" not in context
+    assert ".audit" not in context
     assert len(context) <= MAX_SESSION_CONTEXT
 
 

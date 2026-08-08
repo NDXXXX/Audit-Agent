@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from ddclaw.core import agent as agent_module
-from ddclaw.core.approval import ApprovalRequest, RunInterrupted
-from ddclaw.core.checkpoint import CheckpointManager
-from ddclaw.core.session import SESSION_FILE, SESSION_ROOT
-from ddclaw.core.state import RuntimeState
+from audit_agent.core import agent as agent_module
+from audit_agent.core.approval import ApprovalRequest, RunInterrupted
+from audit_agent.core.checkpoint import CheckpointManager
+from audit_agent.core.session import SESSION_FILE, SESSION_ROOT
+from audit_agent.core.state import RuntimeState
 
 
 class FakeWorkflow:
@@ -144,7 +144,7 @@ def test_stream_agent_events_normalizes_tuple_events(
     checkpoint = json.loads(
         (
             workflow.inputs["runtime"].workspace
-            / ".ddclaw"
+            / ".audit"
             / "checkpoints"
             / "checkpoint.json"
         ).read_text(encoding="utf-8")
@@ -153,7 +153,7 @@ def test_stream_agent_events_normalizes_tuple_events(
     assert checkpoint["latest_node"] == "final"
     trace_files = list(
         (
-            workflow.inputs["runtime"].workspace / ".ddclaw" / "traces"
+            workflow.inputs["runtime"].workspace / ".audit" / "traces"
         ).glob("*/trace.json")
     )
     assert len(trace_files) == 1
@@ -242,7 +242,7 @@ def test_stream_agent_events_passes_runtime_configuration(
     assert runtime.approval_handler is handler
     assert runtime.checkpoint_mode == "off"
     assert runtime.trace_mode == "off"
-    assert not (runtime.workspace / ".ddclaw").exists()
+    assert not (runtime.workspace / ".audit").exists()
 
 
 def test_stream_agent_events_checkpoints_keyboard_interrupt(
@@ -268,13 +268,13 @@ def test_stream_agent_events_checkpoints_keyboard_interrupt(
 
     checkpoint = json.loads(
         (
-            workspace / ".ddclaw" / "checkpoints" / "checkpoint.json"
+            workspace / ".audit" / "checkpoints" / "checkpoint.json"
         ).read_text(encoding="utf-8")
     )
     assert checkpoint["status"] == "interrupted"
     assert checkpoint["latest_node"] == "planner"
     assert checkpoint["state_summary"]["plan_summary"] == "Interrupted plan"
-    trace_path = next((workspace / ".ddclaw" / "traces").glob("*/trace.json"))
+    trace_path = next((workspace / ".audit" / "traces").glob("*/trace.json"))
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["status"] == "interrupted"
     assert trace["latest_node"] == "planner"
@@ -358,8 +358,8 @@ def test_stream_session_events_routes_chat_and_persists_both_turns(
                 "updates",
                 {
                     "chat_responder": {
-                        "chat_response": "你好，我是 DDclaw。",
-                        "final_answer": "你好，我是 DDclaw。",
+                        "chat_response": "你好，我是 Audit Agent。",
+                        "final_answer": "你好，我是 Audit Agent。",
                     }
                 },
             ),
@@ -400,8 +400,8 @@ def test_stream_session_events_routes_chat_and_persists_both_turns(
             "type": "graph_event",
             "event": {
                 "chat_responder": {
-                    "chat_response": "你好，我是 DDclaw。",
-                    "final_answer": "你好，我是 DDclaw。",
+                    "chat_response": "你好，我是 Audit Agent。",
+                    "final_answer": "你好，我是 Audit Agent。",
                 }
             },
         },
@@ -419,7 +419,7 @@ def test_stream_session_events_routes_chat_and_persists_both_turns(
         "assistant",
     ]
     assert stored["recent_turns"][1]["route"] == "chat"
-    assert stored["recent_turns"][1]["content"] == "你好，我是 DDclaw。"
+    assert stored["recent_turns"][1]["content"] == "你好，我是 Audit Agent。"
 
 
 def test_stream_session_events_hands_workflow_state_to_complex_graph(
@@ -447,7 +447,6 @@ def test_stream_session_events_hands_workflow_state_to_complex_graph(
                 {
                     "planner": {
                         "plan_summary": "Create the requested file.",
-                        "code_agent_summary": "Created hello.py.",
                     }
                 },
             ),
@@ -494,7 +493,7 @@ def test_stream_session_events_hands_workflow_state_to_complex_graph(
     )
     assert stored["recent_turns"][-1]["route"] == "workflow"
     assert stored["recent_turns"][-1]["content"] == "Task completed."
-    assert stored["recent_turns"][-1]["summary"] == "Created hello.py."
+    assert stored["recent_turns"][-1]["summary"] == "Task completed."
 
 
 def test_stream_session_events_carries_prior_turns_into_next_context(
@@ -577,7 +576,7 @@ def test_cli_renders_stage3_nodes_handoffs_and_specialist_tools(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
     received: dict[str, Any] = {}
 
     def fake_events(*args: Any, **kwargs: Any) -> Any:
@@ -597,7 +596,6 @@ def test_cli_renders_stage3_nodes_handoffs_and_specialist_tools(
                 ],
                 "acceptance_criteria": ["hello.txt exists"],
                 "verification_commands": ["test -f hello.txt"],
-                "code_agent_summary": "Created hello.txt.",
                 "agent_handoffs": [
                     {
                         "from_agent": "planner",
@@ -696,7 +694,7 @@ def test_cli_passes_runtime_modes_and_resume_without_task(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
     received: dict[str, Any] = {}
 
     def fake_events(task: str, **kwargs: Any) -> Any:
@@ -739,7 +737,7 @@ def test_cli_passes_runtime_modes_and_resume_without_task(
 
 
 def test_cli_requires_task_without_resume(tmp_path: Path) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
 
     result = CliRunner().invoke(
         app_module.app,
@@ -753,7 +751,7 @@ def test_cli_requires_task_without_resume(tmp_path: Path) -> None:
 def test_cli_inline_approval_handler_returns_user_decision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
     monkeypatch.setattr(app_module.typer, "confirm", lambda *args, **kwargs: True)
 
     decision = app_module._inline_approval_handler(
@@ -791,7 +789,7 @@ def test_closing_event_generator_finalizes_interrupted_run(
     events.close()
 
     assert first["type"] == "graph_event"
-    checkpoint_root = workspace / ".ddclaw" / "checkpoints"
+    checkpoint_root = workspace / ".audit" / "checkpoints"
     checkpoint = json.loads(
         (checkpoint_root / "checkpoint.json").read_text(encoding="utf-8")
     )
@@ -802,7 +800,7 @@ def test_closing_event_generator_finalizes_interrupted_run(
     assert checkpoint["latest_node"] == "planner"
     assert lease["status"] == "interrupted"
     trace_events_path = next(
-        (workspace / ".ddclaw" / "traces").glob("*/events.jsonl")
+        (workspace / ".audit" / "traces").glob("*/events.jsonl")
     )
     trace_events = [
         json.loads(line)
@@ -834,10 +832,10 @@ def test_approval_interrupt_finalizes_checkpoint_and_trace(
         )
 
     checkpoint = json.loads(
-        (workspace / ".ddclaw" / "checkpoints" / "checkpoint.json")
+        (workspace / ".audit" / "checkpoints" / "checkpoint.json")
         .read_text(encoding="utf-8")
     )
-    trace_path = next((workspace / ".ddclaw" / "traces").glob("*/trace.json"))
+    trace_path = next((workspace / ".audit" / "traces").glob("*/trace.json"))
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert checkpoint["status"] == "interrupted"
     assert trace["status"] == "interrupted"
@@ -880,7 +878,7 @@ def test_strict_custom_event_uses_quick_checkpoint_without_snapshot(
 def test_cli_converts_prompt_abort_into_clean_interruption(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
 
     def abort(*args: Any, **kwargs: Any) -> bool:
         raise typer.Abort()
@@ -931,7 +929,7 @@ def test_interrupt_during_initial_checkpoint_is_finalized(
         )
 
     checkpoint = json.loads(
-        (workspace / ".ddclaw" / "checkpoints" / "checkpoint.json")
+        (workspace / ".audit" / "checkpoints" / "checkpoint.json")
         .read_text(encoding="utf-8")
     )
     assert checkpoint["status"] == "interrupted"
@@ -942,7 +940,7 @@ def test_cli_reports_clean_exit_code_for_run_interruption(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    app_module = importlib.import_module("ddclaw.cli.app")
+    app_module = importlib.import_module("audit_agent.cli.app")
 
     def interrupted_stream(*args: Any, **kwargs: Any) -> Any:
         raise RunInterrupted("Stopped at approval")
@@ -956,4 +954,4 @@ def test_cli_reports_clean_exit_code_for_run_interruption(
 
     assert result.exit_code == 130
     assert "Run interrupted" in result.output
-    assert "ddclaw --resume" in result.output
+    assert "audit --resume" in result.output

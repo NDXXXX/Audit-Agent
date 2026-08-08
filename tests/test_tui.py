@@ -6,24 +6,24 @@ import pytest
 from textual.binding import Binding
 from textual.widgets import Input, Static
 
-from ddclaw.cli.tui import app as tui_app_module
-from ddclaw.cli.tui.approval import (
+from audit_agent.cli.tui import app as tui_app_module
+from audit_agent.cli.tui.approval import (
     ApprovalGate,
     ApprovalModal,
     ApprovalRequestedMessage,
 )
-from ddclaw.cli.tui.app import AgentEventMessage, DDClawTuiApp
-from ddclaw.cli.tui.logo import (
+from audit_agent.cli.tui.app import AgentEventMessage, AuditAgentTuiApp
+from audit_agent.cli.tui.logo import (
     LOGO_ART,
     LOGO_EARS,
     LOGO_FACE,
     LOGO_STAGE,
     LOGO_TAG,
     LOGO_TITLE,
-    DDClawLogo,
+    AuditAgentLogo,
     render_logo,
 )
-from ddclaw.core.approval import ApprovalRequest
+from audit_agent.core.approval import ApprovalRequest
 
 
 def _approval_request() -> ApprovalRequest:
@@ -65,7 +65,7 @@ def test_logo_art_and_boot_frames_render_the_cat_reveal() -> None:
     )
     assert "/\\_/\\" in LOGO_ART
     assert "( •ᴗ• )ฅ" in LOGO_ART
-    assert "━━━ DDclaw ━━━" in LOGO_ART
+    assert "━━━ Audit Agent ━━━" in LOGO_ART
     assert "MultiAgent Coding Companion" in LOGO_ART
     assert "( -.- )" in render_logo(0).plain
     assert "( •ᴗ• )" in render_logo(4).plain
@@ -95,14 +95,14 @@ def test_logo_workflow_states_have_distinct_cat_frames(
 
 
 def test_logo_rejects_unknown_state() -> None:
-    with pytest.raises(ValueError, match="Unsupported DDclaw logo state"):
+    with pytest.raises(ValueError, match="Unsupported Audit Agent logo state"):
         render_logo(state="unknown")  # type: ignore[arg-type]
 
 
 def test_tui_has_terminal_safe_exit_shortcuts() -> None:
     bindings = {
         binding.key: binding
-        for binding in DDClawTuiApp.BINDINGS
+        for binding in AuditAgentTuiApp.BINDINGS
         if isinstance(binding, Binding)
     }
 
@@ -116,7 +116,7 @@ def test_tui_has_terminal_safe_exit_shortcuts() -> None:
 async def test_tui_mounts_required_layout_and_renders_agent_events(
     tmp_path: Path,
 ) -> None:
-    app = DDClawTuiApp(
+    app = AuditAgentTuiApp(
         session_workspace=tmp_path,
         checkpoint_mode="off",
         trace_mode="off",
@@ -125,7 +125,7 @@ async def test_tui_mounts_required_layout_and_renders_agent_events(
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         assert app.query_one("#task-input", Input)
-        logo = app.query_one("#ascii-logo", DDClawLogo)
+        logo = app.query_one("#ascii-logo", AuditAgentLogo)
         assert app.query_one("#event-log")
         assert app.query_one("#status-bar", Static)
 
@@ -190,7 +190,7 @@ async def test_tui_mounts_required_layout_and_renders_agent_events(
 async def test_tui_approval_message_opens_modal_and_y_approves(
     tmp_path: Path,
 ) -> None:
-    app = DDClawTuiApp(
+    app = AuditAgentTuiApp(
         session_workspace=tmp_path,
         checkpoint_mode="off",
         trace_mode="off",
@@ -202,7 +202,7 @@ async def test_tui_approval_message_opens_modal_and_y_approves(
         await pilot.pause()
 
         assert isinstance(app.screen, ApprovalModal)
-        assert app.query_one("#ascii-logo", DDClawLogo).logo_state == "approval"
+        assert app.query_one("#ascii-logo", AuditAgentLogo).logo_state == "approval"
         command = app.screen.query_one("#approval-command", Static)
         assert str(command.render()) == "python -m pip install example"
 
@@ -213,7 +213,7 @@ async def test_tui_approval_message_opens_modal_and_y_approves(
         decision = gate.wait(0.1)
         assert decision.approved is True
         assert "Approved by the user" in decision.reason
-        assert app.query_one("#ascii-logo", DDClawLogo).logo_state == "tool"
+        assert app.query_one("#ascii-logo", AuditAgentLogo).logo_state == "tool"
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_tui_input_runs_session_stream_in_worker(
         }
 
     monkeypatch.setattr(tui_app_module, "stream_session_events", fake_stream)
-    app = DDClawTuiApp(
+    app = AuditAgentTuiApp(
         session_workspace=tmp_path,
         max_attempts=5,
         checkpoint_mode="off",
@@ -268,19 +268,19 @@ async def test_tui_input_runs_session_stream_in_worker(
         assert app._turn_running is False
         assert app.query_one("#task-input", Input).disabled is False
         assert app._last_final_answer == "你好！"
-        assert app.query_one("#ascii-logo", DDClawLogo).logo_state == "success"
+        assert app.query_one("#ascii-logo", AuditAgentLogo).logo_state == "success"
 
 
 @pytest.mark.asyncio
 async def test_tui_maps_agent_events_to_logo_states(tmp_path: Path) -> None:
-    app = DDClawTuiApp(
+    app = AuditAgentTuiApp(
         session_workspace=tmp_path,
         checkpoint_mode="off",
         trace_mode="off",
     )
 
     async with app.run_test(size=(120, 40)) as pilot:
-        logo = app.query_one("#ascii-logo", DDClawLogo)
+        logo = app.query_one("#ascii-logo", AuditAgentLogo)
 
         app._render_graph_update("planner", {"todos": []})
         assert logo.logo_state == "planner"

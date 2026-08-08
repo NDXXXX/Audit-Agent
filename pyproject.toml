@@ -3,9 +3,9 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DDclaw"
-version = "0.1.0"
-description = "A workspace-scoped coding agent CLI powered by LangChain and DeepSeek."
+name = "audit-agent"
+version = "0.2.0"
+description = "Multi-agent code review with adversarial verification — powered by LangGraph and DeepSeek."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -27,8 +27,8 @@ dev = [
 ]
 
 [project.scripts]
-ddclaw = "ddclaw.cli.app:app"
-ddclaw-tui = "ddclaw.cli.tui.app:run_tui"
+audit = "audit_agent.cli.app:app"
+audit-tui = "audit_agent.cli.tui.app:run_tui"
 
 [project.urls]
 Homepage = "https://github.com/NDXXXX/DDclaw"
@@ -37,9 +37,14 @@ Issues = "https://github.com/NDXXXX/DDclaw/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ddclaw*"]
+include = ["audit_agent*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.4.0",
+]
