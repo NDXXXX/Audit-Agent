@@ -1,33 +1,34 @@
 <p align="center">
-  <img src="docs/assets/ddclaw-logo.png" alt="DDclaw Logo" width="420">
+  <img src="docs/assets/ddclaw-logo.png" alt="Audit Agent Logo" width="420">
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-# DDClaw
+# Audit Agent
 
-DDclaw 是一个运行在本地终端中的多 Agent 编程助手。它以 DeepSeek 为
-大语言模型，通过 LangGraph 组织规划、实现、验证、上下文压缩和失败重试，
-并将所有文件操作限制在用户指定的 workspace 内。
+Audit Agent 是一个运行在本地终端中的多 Agent 代码审查系统。它以 DeepSeek 为
+大语言模型，通过 LangGraph 组织四维度并行审计、对抗验证去误报、上下文压缩和
+失败重试，最终生成结构化的代码审查报告。
 
 项目同时提供两种使用方式：
 
-- `ddclaw`：适合脚本化和单次编程任务的 Typer CLI。
-- `ddclaw-tui`：支持多轮会话、实时事件流、审批弹窗和动态猫咪 Logo 的
+- `audit`：适合脚本化和单次审查任务的 Typer CLI。
+- `audit-tui`：支持多轮会话、实时事件流、审批弹窗和动态猫咪 Logo 的
   Textual 终端界面。
 
-> 当前版本：`0.1.0`。项目仍处于早期阶段，建议先在独立 workspace 中使用。
+> 当前版本：`0.2.0`。项目仍处于早期阶段，建议先在独立 workspace 中使用。
 
 ## 核心能力
 
-- **监督式多 Agent 协作**：Planner 负责任务拆解和调度，`codeAgent`
-  负责实现，`searchAgent` 负责联网研究，Verifier 独立验收结果。
-- **真实工作区操作**：支持读取、创建、覆写、精确编辑、正则搜索和 Shell
-  命令执行。
-- **计划与验收闭环**：每次任务包含结构化 TODO、验收标准和验证命令；
-  Verifier 失败后可返回 Planner 修订并重试。
+- **四维度并行审计**：Planner 一次调度，4 个 Auditor（security / perf /
+  correctness / style）并行审查，加上 search_agent 进行 CVE 联网检索，
+  5 路并发执行。
+- **对抗验证去误报**：Verifier 独立审查每条 finding，去重合并 + 对抗质询，
+  只保留确认属实的问题，而非全量输出。
+- **结构化审查报告**：每条 finding 包含 dimension、severity、file、line、
+  title、description、suggestion，最终输出按 critical → low 排序的报告。
 - **Human-in-the-loop 审批**：安装依赖、网络下载、开发服务器及破坏性命令
   会根据审批模式放行、询问或拒绝。
 - **Workspace 边界保护**：文件工具会解析真实路径和符号链接，拒绝访问
@@ -37,12 +38,11 @@ DDclaw 是一个运行在本地终端中的多 Agent 编程助手。它以 DeepS
 - **执行追踪**：记录节点访问、工具调用、审批、Agent 交接、失败次数和时间线。
 - **长上下文治理**：运行时组装三层 Memory，并在上下文超限时压缩历史。
 - **持久化多轮会话**：TUI 保存最近会话和 workspace 文件摘要，支持连续追问。
-- **可选 Web 搜索**：配置 Tavily 后，Planner 可将研究工作交给
-  `searchAgent`。
+- **可选 Web 搜索**：配置 Tavily 后，search_agent 可检索 CVE 和安全最佳实践。
 
 ## 工作流架构
 
-TUI 会先判断输入是普通聊天还是需要访问 workspace 的任务；CLI 直接进入
+TUI 会先判断输入是普通聊天还是需要访问 workspace 的审查任务；CLI 直接进入
 任务工作流。
 
 ```mermaid
@@ -52,10 +52,17 @@ flowchart TD
     IR -->|workflow| P[Planner / Supervisor]
     U -. CLI task .-> P
 
-    P -->|research handoff| S[searchAgent]
-    P -->|implementation handoff| C[codeAgent]
+    P -->|fan-out| A1[security_auditor]
+    P -->|fan-out| A2[perf_auditor]
+    P -->|fan-out| A3[correctness_auditor]
+    P -->|fan-out| A4[style_auditor]
+    P -->|fan-out| S[search_agent]
+
+    A1 --> P
+    A2 --> P
+    A3 --> P
+    A4 --> P
     S --> P
-    C --> P
 
     P --> M[Context monitor]
     M -->|context too large| CC[Context compressor]
@@ -64,38 +71,52 @@ flowchart TD
     V -->|failed and attempts remain| M
     M -->|re-plan| P
     V -->|passed or attempts exhausted| M
-    M --> F[Final]
+    M --> F[Final — audit report]
 ```
 
 ### Planner / Supervisor
 
-Planner 先通过 `TodoWriteTool` 发布计划、TODO、验收标准和验证命令，再根据
-任务需要调用：
+Planner 分析用户提交的审查目标，通过 `TodoWriteTool` 发布审查计划、TODO、
+验收标准，然后调用 `CallAuditorsTool` 并行调度 4 个 Auditor + search_agent：
 
-- `CallSearchAgentTool`：委托事实或资料研究。
-- `CallCodeAgentTool`：委托代码和文件实现。
+- `CallAuditorsTool`：向 4 个 Auditor 分发审查指令（security / perf /
+  correctness / style），内部使用 ThreadPoolExecutor 并行执行。
+- `CallSearchAgentTool`：委托 CVE 和安全最佳实践检索。
 
-如果 Verifier 失败，Planner 会读取失败原因并只安排缺失的修复步骤。
+如果 Verifier 发现审查深度不够，Planner 会读取失败原因并下发补充审查指令。
 
-### codeAgent
+### Auditor（四维度审查 Agent）
 
-`codeAgent` 是 workspace 内的实现专家。它可以使用文件、Grep、Bash 和
-TODO 更新工具，在开始、完成或阻塞任务时更新 TODO 状态，并将工具事件实时
-发送给 CLI/TUI。
+每个 Auditor 使用只读工具（file_read + grep + web_search），不修改工作区文件。
+审查维度：
 
-### searchAgent
+| 维度 | 关注点 |
+|------|--------|
+| **security** | 注入、XSS、认证绕过、硬编码密钥、不安全反序列化、加密弱点 |
+| **perf** | N+1 查询、O(n²) 复杂度、缺失索引、无界分配、阻塞 I/O、缓存缺失 |
+| **correctness** | 差一错误、空引用、竞态条件、条件反转、缺失错误处理、类型错误 |
+| **style** | 命名规范、缺失文档、圈复杂度、死代码、类型注解缺失、不一致格式 |
 
-`searchAgent` 只使用 Tavily Web 搜索，不编辑文件。它收集查询、答案摘要和
-来源 URL，再将研究结果交还 Planner 与 `codeAgent`。
+每个 Auditor 运行 ReAct 循环（最多 5 轮），从模型输出中解析结构化 JSON
+findings。
+
+### search_agent
+
+`search_agent` 只使用 Tavily Web 搜索，不编辑文件。它收集查询、答案摘要和
+来源 URL，用于补充 CVE 信息和安全最佳实践参考。
 
 ### Verifier
 
-Verifier 不只相信 Agent 的完成摘要。它会：
+Verifier 不只相信 Auditor 的报告。它会：
 
-1. 先运行 Planner 给出的验证命令并保存退出码、stdout 和 stderr。
-2. 使用只读文件与 Grep 工具检查实际 workspace。
-3. 根据验收标准生成结构化结论。
-4. 失败时给出下一轮需要修复的具体指令。
+1. 运行 Planner 给出的验证命令并保存退出码、stdout 和 stderr。
+2. 使用只读文件与 Grep 工具检查实际代码。
+3. **去重合并**：security 和 correctness 同时报告了同一个问题 → 合并为一条。
+4. **对抗验证**：对每条 finding 做 adversarial verify —— "这个告警真的是
+   bug 还是误报？"。
+5. **排序输出**：confirmed / false_positive / duplicate，按 critical → low
+   排列 verified_findings。
+6. 审查深度不够时给出下一轮需要补充检查的具体指令。
 
 ## 内置工具
 
@@ -165,7 +186,7 @@ TAVILY_API_KEY=your-real-tavily-api-key
 - `.env` 已加入 `.gitignore`，不要将真实密钥提交到 Git。
 - `.env.example` 只能保存占位符。
 - 没有 `DEEPSEEK_API_KEY` 时，模型工厂会直接报错。
-- 没有 `TAVILY_API_KEY` 时，普通代码任务仍可运行；Web 搜索会返回
+- 没有 `TAVILY_API_KEY` 时，普通审查任务仍可运行；Web 搜索会返回
   `missing TAVILY_API_KEY`。
 
 ## CLI 使用
@@ -173,29 +194,29 @@ TAVILY_API_KEY=your-real-tavily-api-key
 完成依赖同步后运行：
 
 ```bash
-uv run --no-sync ddclaw \
-  "创建一个 hello.py，并运行测试" \
+uv run --no-sync audit \
+  "审查 src/ 目录的安全性" \
   --workspace ./workspace
 ```
 
 也可以在激活虚拟环境后直接使用：
 
 ```bash
-ddclaw "修复当前项目的失败测试" -w ./workspace
+audit "审查 app.py 的性能问题" -w ./workspace
 ```
 
-如果不指定 `--workspace`，DDclaw 会在当前目录自动创建并使用：
+如果不指定 `--workspace`，Audit Agent 会在当前目录自动创建并使用：
 
 ```text
-.ddclaw-workspace/
+.audit-workspace/
 ```
 
 ### 常用参数
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-| `task` | 无 | 要执行的任务；使用 `--resume` 时可以省略 |
-| `--workspace`, `-w` | `.ddclaw-workspace` | Agent 唯一允许操作的工作区 |
+| `task` | 无 | 要审查的任务；使用 `--resume` 时可以省略 |
+| `--workspace`, `-w` | `.audit-workspace` | Agent 唯一允许操作的工作区 |
 | `--max-attempts` | `3` | Planner → Verifier 最大尝试次数 |
 | `--approval-mode` | `inline` | `inline`、`auto` 或 `deny` |
 | `--checkpoint-mode` | `light` | `light`、`strict` 或 `off` |
@@ -205,23 +226,23 @@ ddclaw "修复当前项目的失败测试" -w ./workspace
 查看完整帮助：
 
 ```bash
-uv run --no-sync ddclaw --help
-python -m ddclaw --help
+uv run --no-sync audit --help
+python -m audit_agent --help
 ```
 
 ## TUI 使用
 
 ```bash
-uv run --no-sync ddclaw-tui
+uv run --no-sync audit-tui
 ```
 
-TUI 默认使用当前目录下的 `.ddclaw-workspace`，支持：
+TUI 默认使用当前目录下的 `.audit-workspace`，支持：
 
 - 多轮输入与会话上下文。
 - Plan 面板和实时工具事件流。
-- Planner → Agent 交接信息。
+- Planner → Auditor 交接信息。
 - 风险命令审批弹窗。
-- Checkpoint 与最终验收状态。
+- Checkpoint 与最终审查报告。
 - 猫咪 Logo 的启动动画和工作流状态动画。
 
 快捷键：
@@ -260,7 +281,7 @@ TUI 默认使用当前目录下的 `.ddclaw-workspace`，支持：
 
 ## Checkpoint 与恢复
 
-DDclaw 将运行数据保存在 workspace 内的 `.ddclaw/`，不会写入项目源码目录，
+Audit Agent 将运行数据保存在 workspace 内的 `.audit/`，不会写入项目源码目录，
 除非源码目录本身就是你指定的 workspace。
 
 Checkpoint 模式：
@@ -271,22 +292,22 @@ Checkpoint 模式：
 | `strict` | 在 light 基础上增加完整 `state.json` 与逐事件 `events.jsonl` |
 | `off` | 不创建 Checkpoint |
 
-被 Ctrl+C 中断时，DDclaw 会先将 Checkpoint 原子更新为 `interrupted`，结束
+被 Ctrl+C 中断时，Audit Agent 会先将 Checkpoint 原子更新为 `interrupted`，结束
 Trace，并终止仍在运行的 Bash 进程组。恢复命令：
 
 ```bash
-uv run --no-sync ddclaw --resume ./workspace
+uv run --no-sync audit --resume ./workspace
 ```
 
 恢复时会重建图输入，并根据上次保存的状态重新规划未完成工作。若检测到同一
-workspace 仍有活动进程，DDclaw 会拒绝并发恢复。
+workspace 仍有活动进程，Audit Agent 会拒绝并发恢复。
 
 ## Trace
 
 启用 Trace 后，每次运行会创建独立目录：
 
 ```text
-workspace/.ddclaw/traces/<trace-id>/
+workspace/.audit/traces/<trace-id>/
 ├── trace.json
 ├── events.jsonl
 └── timeline.md
@@ -304,7 +325,7 @@ Checkpoint 改回 `running`。
 TUI 会在 workspace 中保存：
 
 ```text
-workspace/.ddclaw/session/
+workspace/.audit/session/
 ├── session.json
 └── SESSION_SUMMARY.md
 ```
@@ -315,8 +336,8 @@ workspace/.ddclaw/session/
 Agent 每次调用前由运行时组装三层 Memory：
 
 1. **Rules Layer**：固定的 workspace 和持久化规则。
-2. **Working Memory**：任务、计划、TODO、验收标准、研究记录、Agent 交接、
-   最近失败和尝试次数。
+2. **Working Memory**：任务、计划、TODO、验收标准、审查发现（review_findings）、
+   Agent 交接、最近失败和尝试次数。
 3. **History Summary Store**：压缩历史、`HISTORY_SUMMARY.md`、可选的
    `NOTEPAD.md` 和最近压缩事件。
 
@@ -330,7 +351,7 @@ Context Compressor。压缩后的摘要会替换冗长消息历史并写入
 
 ```text
 workspace/
-├── .ddclaw/
+├── .audit/
 │   ├── checkpoints/
 │   │   ├── checkpoint.json
 │   │   ├── RECOVERY.md
@@ -348,7 +369,7 @@ Checkpoint Git 快照。
 
 ## 安全边界
 
-DDclaw 提供的是应用层防护，不是完整安全沙箱：
+Audit Agent 提供的是应用层防护，不是完整安全沙箱：
 
 - 文件工具拒绝解析到 workspace 之外的路径，包括符号链接逃逸。
 - Bash 以 workspace 作为当前目录，并提供超时和风险审批。
@@ -361,33 +382,33 @@ DDclaw 提供的是应用层防护，不是完整安全沙箱：
 ## 项目结构
 
 ```text
-src/ddclaw/
+src/audit_agent/
 ├── agents/
-│   ├── code_agent.py           # 实现专家
-│   └── search_agent.py         # Tavily 搜索专家
+│   ├── auditor.py               # 四维度审查 Agent（security / perf / correctness / style）
+│   └── search_agent.py          # Tavily 搜索 Agent
 ├── cli/
-│   ├── app.py                  # Typer CLI
+│   ├── app.py                   # Typer CLI
 │   └── tui/
-│       ├── app.py              # Textual 多轮 TUI
-│       ├── approval.py         # 审批弹窗与线程同步
-│       └── logo.py             # 动态猫咪 Logo
+│       ├── app.py               # Textual 多轮 TUI
+│       ├── approval.py          # 审批弹窗与线程同步
+│       └── logo.py              # 动态猫咪 Logo
 ├── core/
-│   ├── agent.py                # 工作流事件流、Checkpoint 与 Trace 协调
-│   ├── approval.py             # 风险分类与审批状态
-│   ├── checkpoint.py           # 保存、Git 快照和恢复
-│   ├── paths.py                # workspace 路径安全
-│   ├── session.py              # 多轮会话持久化
-│   ├── state.py                # RuntimeState
-│   └── trace.py                # 执行追踪
+│   ├── agent.py                 # 工作流事件流、Checkpoint 与 Trace 协调
+│   ├── approval.py              # 风险分类与审批状态
+│   ├── checkpoint.py            # 保存、Git 快照和恢复
+│   ├── paths.py                 # workspace 路径安全
+│   ├── session.py               # 多轮会话持久化
+│   ├── state.py                 # RuntimeState
+│   └── trace.py                 # 执行追踪
 ├── graph/
-│   ├── memory.py               # 三层 Memory
-│   ├── nodes.py                # Planner、Verifier、Context 等节点
-│   ├── state.py                # LangGraph 共享状态
-│   └── workflow.py             # 入口图和主工作流图
-├── prompts/                    # 各阶段 System Prompt
+│   ├── memory.py                # 三层 Memory
+│   ├── nodes.py                 # Planner、Auditors、Verifier、Context 等节点
+│   ├── state.py                 # LangGraph 共享状态（AuditGraphState）
+│   └── workflow.py              # 入口图和主工作流图
+├── prompts/                     # 各阶段 System Prompt
 ├── providers/
-│   └── deepseek_provider.py    # ChatDeepSeek 工厂
-└── tools/                      # 文件、Grep、Bash、Todo 与 Web 搜索工具
+│   └── deepseek_provider.py     # ChatDeepSeek 工厂
+└── tools/                       # 文件、Grep、Bash、Todo 与 Web 搜索工具
 ```
 
 ## 开发与测试
@@ -405,13 +426,14 @@ uv run --no-sync pytest -q
 ```
 
 当前测试覆盖 CLI、TUI、文件与路径安全、审批、Checkpoint、Trace、Session、
-Memory、图节点、工作流、DeepSeek Provider 和 Web Search Agent。
+Memory、图节点、工作流、Auditor、DeepSeek Provider、Web Search Agent、
+Tool Execution、Todo Tools 与端到端 Smoke Test。
 
 也可以分别验证入口：
 
 ```bash
-uv run --no-sync ddclaw --help
-uv run --no-sync python -m ddclaw --help
+uv run --no-sync audit --help
+uv run --no-sync python -m audit_agent --help
 ```
 
 ## 当前限制

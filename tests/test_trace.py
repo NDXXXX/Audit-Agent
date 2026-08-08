@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ddclaw.core.state import RuntimeState
-from ddclaw.core.trace import TraceRecorder, normalize_trace_mode
+from audit_agent.core.state import RuntimeState
+from audit_agent.core.trace import TraceRecorder, normalize_trace_mode
 
 
 @pytest.mark.parametrize(
@@ -126,7 +126,7 @@ def test_trace_records_events_statistics_and_human_timeline(
     assert trace["timeline_omitted"] == 0
 
     assert recorder.root == (
-        runtime.workspace / ".ddclaw" / "traces" / "trace-test-001"
+        runtime.workspace / ".audit" / "traces" / "trace-test-001"
     )
     stored_trace = json.loads(
         (recorder.root / "trace.json").read_text(encoding="utf-8")
@@ -139,7 +139,7 @@ def test_trace_records_events_statistics_and_human_timeline(
     assert json.loads(event_lines[0])["type"] == "run_start"
     assert json.loads(event_lines[-1])["type"] == "run_end"
     timeline = (recorder.root / "timeline.md").read_text(encoding="utf-8")
-    assert "# DDclaw Execution Trace" in timeline
+    assert "# Audit Agent Execution Trace" in timeline
     assert "Create an application" in timeline
     assert "tool_call" in timeline
     assert "planner" in timeline
@@ -252,7 +252,7 @@ def test_trace_uses_resume_event_and_safe_trace_id(tmp_path: Path) -> None:
 
     assert recorder.trace_id == "unsafe-trace-id"
     assert recorder.root.is_relative_to(
-        runtime.workspace / ".ddclaw" / "traces"
+        runtime.workspace / ".audit" / "traces"
     )
     assert event is not None
     assert event["resumed"] is True

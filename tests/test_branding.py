@@ -5,23 +5,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-import ddclaw
+import audit_agent
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_lowercase_package_imports() -> None:
-    assert ddclaw.__name__ == "ddclaw"
+    assert audit_agent.__name__ == "audit_agent"
 
 
 def test_project_exposes_only_new_command_names() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'ddclaw = "ddclaw.cli.app:app"' in pyproject
-    assert 'ddclaw-tui = "ddclaw.cli.tui.app:run_tui"' in pyproject
+    assert 'audit = "audit_agent.cli.app:app"' in pyproject
+    assert 'audit-tui = "audit_agent.cli.tui.app:run_tui"' in pyproject
 
-    legacy_command = "ND" + "claw ="
-    legacy_tui_command = "ND" + "claw-tui ="
+    legacy_command = "ddclaw = "
+    legacy_tui_command = "ddclaw-tui = "
     assert legacy_command not in pyproject
     assert legacy_tui_command not in pyproject
 
@@ -30,7 +30,7 @@ def test_python_module_help_uses_new_package() -> None:
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(ROOT / "src")
     result = subprocess.run(
-        [sys.executable, "-m", "ddclaw", "--help"],
+        [sys.executable, "-m", "audit_agent", "--help"],
         cwd=ROOT,
         env=environment,
         capture_output=True,
@@ -51,7 +51,7 @@ def test_tracked_project_text_has_no_legacy_brand() -> None:
         ROOT / ".gitignore",
         ROOT / ".env.example",
     ]
-    files.extend((ROOT / "src" / "ddclaw").rglob("*.py"))
+    files.extend((ROOT / "src" / "audit_agent").rglob("*.py"))
     files.extend((ROOT / "tests").rglob("*.py"))
 
     occurrences: list[str] = []

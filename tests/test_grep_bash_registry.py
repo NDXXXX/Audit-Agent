@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from ddclaw.core.state import RuntimeState
-from ddclaw.tools.bash_tool import BashTool
-from ddclaw.tools.grep_tool import GrepTool
-from ddclaw.tools.registry import build_read_only_tools, build_tools
+from audit_agent.core.state import RuntimeState
+from audit_agent.tools.bash_tool import BashTool
+from audit_agent.tools.grep_tool import GrepTool
+from audit_agent.tools.registry import build_read_only_tools, build_tools
 
 
 def test_grep_supports_regex_glob_limit_and_case(tmp_path: Path) -> None:

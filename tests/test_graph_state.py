@@ -4,11 +4,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
-from ddclaw.graph.state import (
+from audit_agent.graph.state import (
     AgentHandoff,
     CompressionEvent,
     LayeredMemory,
-    DDclawGraphState,
+    AuditGraphState,
     SourceItem,
     TodoItem,
     VerificationResult,
@@ -16,8 +16,8 @@ from ddclaw.graph.state import (
 
 
 def test_graph_state_fields_are_optional() -> None:
-    assert DDclawGraphState.__required_keys__ == frozenset()
-    assert DDclawGraphState.__optional_keys__ == {
+    assert AuditGraphState.__required_keys__ == frozenset()
+    assert AuditGraphState.__optional_keys__ == {
         "task",
         "runtime",
         "messages",
@@ -26,7 +26,8 @@ def test_graph_state_fields_are_optional() -> None:
         "research_notes",
         "sources",
         "agent_handoffs",
-        "code_agent_summary",
+        "review_findings",
+        "verified_findings",
         "context_summary",
         "context_token_count",
         "context_token_limit",
@@ -89,7 +90,7 @@ def test_nested_state_items_have_required_fields() -> None:
 
 def test_messages_field_uses_add_messages_reducer() -> None:
     message_hint = get_type_hints(
-        DDclawGraphState,
+        AuditGraphState,
         include_extras=True,
     )["messages"]
 
@@ -100,7 +101,7 @@ def test_messages_field_uses_add_messages_reducer() -> None:
 
 
 def test_state_graph_merges_messages_instead_of_overwriting() -> None:
-    builder = StateGraph(DDclawGraphState)
+    builder = StateGraph(AuditGraphState)
     builder.add_node(
         "respond",
         lambda state: {
